@@ -1,10 +1,11 @@
 import brainrender
-from brainrender.scene import Scene
+from brainrender.scene import Scene, check_camera_param,set_camera,show
 from brainrender.Utils.data_manipulation import get_coords, flatten_list, is_any_item_in_list
 from vtkplotter import Text2D, closePlotter, embedWindow, settings, Plane, Text
 
 class ZXScene(Scene):
     def apply_render_style(self):
+
         if brainrender.SHADER_STYLE is None:  # No style to apply
             return
 
@@ -14,7 +15,7 @@ class ZXScene(Scene):
         for actor in actors:
             if actor is not None:
                 try:
-                    actor.lighting(style='ambient',ambient=1, diffuse=0, specular=0,specularPower=1,specularColor=(0,0,0))
+                    actor.lighting(style='ambient',ambient=0.75, diffuse=0.75, specular=0,specularPower=1,specularColor=(0,0,0))
                 except:
                     pass  # Some types of actors such as Text 2D don't have this attribute!
 
@@ -139,3 +140,63 @@ class ZXScene(Scene):
             return to_return[0]
         else:
             return to_return
+
+
+    # ---------------------------------- Render ---------------------------------- #
+    def render(self, interactive=True, video=False, camera=None, zoom=None, **kwargs):
+        """
+        Takes care of rendering the scene
+        """
+        self.apply_render_style()
+
+        if not video:
+            if not self.jupyter:  # cameras work differently in jupyter notebooks?
+                if camera is None:
+                    camera = self.camera
+
+                if isinstance(camera, (str, dict)):  # otherwise assume that it's vtk.camera
+                    camera = check_camera_param(camera)
+                print(self)
+                set_camera(self, camera)
+
+            if interactive:
+                if self.verbose and not self.jupyter:
+                    print(brainrender.INTERACTIVE_MSG)
+                elif self.jupyter:
+                    print("The scene is ready to render in your jupyter notebook")
+                else:
+                    print("\n\nRendering scene.\n   Press 'q' to Quit")
+
+            self._get_inset()
+
+        if zoom is None and not video:
+            if brainrender.WHOLE_SCREEN:
+                zoom = 1.85
+            else:
+                zoom = 1.5
+
+        # Make mesh labels follow the camera
+        if not self.jupyter:
+            for txt in self.actors['labels']:
+                txt.followCamera(self.plotter.camera)
+
+        self.is_rendered = True
+        if not self.jupyter:
+            if interactive and not video:
+                show(*self.get_actors(), interactive=True, zoom=zoom,
+                     bg=brainrender.BACKGROUND_COLOR, axes=self.plotter.axes)
+            elif video:
+                show(*self.get_actors(), interactive=False,
+                     bg=brainrender.BACKGROUND_COLOR,
+                     offscreen=True, zoom=zoom, axes=self.plotter.axes)
+            else:
+                show(*self.get_actors(), interactive=False, offscreen=True, zoom=zoom,
+                     bg=brainrender.BACKGROUND_COLOR, axes=self.plotter.axes)
+
+            self.plotter.camera.ParallelProjectionOn()
+            self.plotter.camera.SetParallelScale(self.plotter.camera.GetParallelScale()* 0.75)
+            if interactive and not video:
+                show(*self.get_actors(), interactive=True, bg=brainrender.BACKGROUND_COLOR,
+                     axes=self.plotter.axes)
+                self.plotter.camera.ParallelProjectionOn()
+                self.plotter.camera.SetParallelScale(self.plotter.camera.GetParallelScale()* 0.75)
